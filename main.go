@@ -30,19 +30,21 @@ func main() {
 	ctx, cancel := context.WithCancel(ctx)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
-	defer func() {
-		signal.Stop(c)
-		cancel()
-	}()
-	go func() {
-		select {
-		case <-c:
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
 
 	for {
+		//
+		defer func() {
+			signal.Stop(c)
+			cancel()
+		}()
+		go func() {
+			select {
+			case <-c:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+		//
 		do, err := parseArgs()
 		if err != nil {
 			log.Println(err)
@@ -78,7 +80,7 @@ func run(args ...string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("run command needs at least one argument")
 	}
-	cmd := exec.Command("CLEAR")
+	cmd := exec.Command("run clear")
 	cmd = exec.Command(args[0], args[1:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
