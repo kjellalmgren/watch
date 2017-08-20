@@ -3,11 +3,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
-	"syscall"
+	"os/signal"
+	"time"
 )
 
 const usage = `usage:
@@ -21,20 +23,45 @@ const cmdRun = "run"
 
 //
 func main() {
-	do, err := parseArgs()
-	if err != nil {
-		log.Println(err)
-		fmt.Println(usage)
-		os.Exit(1)
-	}
-	if err := do(os.Args[2:]...); err != nil {
-		log.Fatalln(err)
+
+	ctx := context.Background()
+
+	// trap Ctrl+C and call cancel on the content
+	ctx, cancel := context.WithCancel(ctx)
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	defer func() {
+		signal.Stop(c)
+		cancel()
+	}()
+	go func() {
+		select {
+		case <-c:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	for {
+		do, err := parseArgs()
+		if err != nil {
+			log.Println(err)
+			fmt.Println(usage)
+			os.Exit(1)
+		}
+		//
+		if err := do(os.Args[2:]...); err != nil {
+			log.Fatalln(err)
+		}
+		fmt.Println("sleeping...")
+		time.Sleep(5 * time.Second)
 	}
 }
 
+//
 func parseArgs() (action, error) {
 	if len(os.Args) < 2 {
-		return nil, fmt.Errorf("needs a command")
+		return nil, fmt.Errorf("Watch needs a command")
 	}
 	switch os.Args[1] {
 	case cmdRun:
@@ -51,14 +78,15 @@ func run(args ...string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("run command needs at least one argument")
 	}
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.Command("CLEAR")
+	cmd = exec.Command(args[0], args[1:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		// create new UTS namespace (since Linux 2.6.19)
-		Cloneflags: syscall.CLONE_NEWUTS,
-	}
+	//cmd.SysProcAttr = &syscall.SysProcAttr{
+	// create new UTS namespace (since Linux 2.6.19)
+	//	Cloneflags: syscall.CLONE_NEWUTS,
+	//}
 	if err := cmd.Run(); err != nil {
 		return err
 	}
